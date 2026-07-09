@@ -1,4 +1,4 @@
-name: Android CI (Librera Custom Build)
+name: Android CI (Librera Fixed Build)
 
 on:
   push:
@@ -17,28 +17,32 @@ jobs:
       with:
         submodules: 'recursive'
 
-    - name: Set up JDK 17
+    # গ্রেডলের সাথে সামঞ্জস্য রাখতে Java 11 সেটআপ (প্রয়োজনে ১৭ ট্রাই করা যাবে)
+    - name: Set up JDK 11
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '11'
         distribution: 'temurin'
         cache: gradle
 
     - name: Create Setup Files (local.properties & keystore)
       run: |
-        # ১. সার্ভারে আগে থেকেই থাকা Android SDK-এর লোকেশন দেখিয়ে দেওয়া
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         
-        # ২. ডামি কিস্টোর ফাইল তৈরি করা (যাতে বিল্ড ক্র্যাশ না করে)
-        echo "storeFile=mock.jks" > keystore.properties
-        echo "storePassword=mock_password" >> keystore.properties
-        echo "keyAlias=mock_alias" >> keystore.properties
-        echo "keyPassword=mock_password" >> keystore.properties
+        if [ ! -f "keystore.properties" ]; then
+          echo "storeFile=mock.jks" > keystore.properties
+          echo "storePassword=mock_password" >> keystore.properties
+          echo "keyAlias=mock_alias" >> keystore.properties
+          echo "keyPassword=mock_password" >> keystore.properties
+        fi
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
+    # JAVA_HOME এনভায়রনমেন্ট ভ্যারিয়েবল সহ গ্রেডল রান করা
     - name: Build Debug APK
+      env:
+        JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK Artifact
