@@ -1,4 +1,4 @@
-name: Android CI (Librera Fixed Build)
+name: Android CI (Librera Properties Fixed)
 
 on:
   push:
@@ -17,7 +17,6 @@ jobs:
       with:
         submodules: 'recursive'
 
-    # গ্রেডলের সাথে সামঞ্জস্য রাখতে Java 11 সেটআপ (প্রয়োজনে ১৭ ট্রাই করা যাবে)
     - name: Set up JDK 11
       uses: actions/setup-java@v4
       with:
@@ -25,24 +24,27 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Create Setup Files (local.properties & keystore)
+    - name: Create Setup Files (local.properties & Exact keystore properties)
       run: |
+        # ১. Android SDK-এর ডিফল্ট লোকেশন সেট করা
         echo "sdk.dir=$ANDROID_HOME" > local.properties
         
-        if [ ! -f "keystore.properties" ]; then
-          echo "storeFile=mock.jks" > keystore.properties
-          echo "storePassword=mock_password" >> keystore.properties
-          echo "keyAlias=mock_alias" >> keystore.properties
-          echo "keyPassword=mock_password" >> keystore.properties
-        fi
+        # ২. অরিজিনাল build.gradle যে নির্দিষ্ট ভ্যারিয়েবলগুলো খুঁজছে, হুবহু সেই নামে ডামি ডেটা তৈরি করা
+        echo "RELEASE_STORE_FILE=mock.jks" > keystore.properties
+        echo "RELEASE_STORE_PASSWORD=mock_password" >> keystore.properties
+        echo "RELEASE_KEY_ALIAS=mock_alias" >> keystore.properties
+        echo "RELEASE_KEY_PASSWORD=mock_password" >> keystore.properties
+        
+        # কিছু প্রোজেক্টে ছোট হাতের অক্ষরেও খুঁজতে পারে, তাই নিরাপদ থাকার জন্য দুই ফরম্যাটই রাখা হলো
+        echo "storeFile=mock.jks" >> keystore.properties
+        echo "storePassword=mock_password" >> keystore.properties
+        echo "keyAlias=mock_alias" >> keystore.properties
+        echo "keyPassword=mock_password" >> keystore.properties
 
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    # JAVA_HOME এনভায়রনমেন্ট ভ্যারিয়েবল সহ গ্রেডল রান করা
     - name: Build Debug APK
-      env:
-        JAVA_HOME: ${{ env.JAVA_HOME_11_X64 }}
       run: ./gradlew assembleDebug --stacktrace
 
     - name: Upload APK Artifact
