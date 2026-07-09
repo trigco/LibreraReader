@@ -1,21 +1,33 @@
-name: Android CI (Librera Properties Fixed)
+name: Librera Android Build & Release
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build Type'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+          - fdroid
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    name: Build Librera APK
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
       with:
         submodules: 'recursive'
+        fetch-depth: 0
 
     - name: Set up JDK 11
       uses: actions/setup-java@v4
@@ -24,32 +36,146 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Create Setup Files (local.properties & Exact keystore properties)
-      run: |
-        # ১. Android SDK-এর ডিফল্ট লোকেশন সেট করা
-        echo "sdk.dir=$ANDROID_HOME" > local.properties
-        
-        # ২. অরিজিনাল build.gradle যে নির্দিষ্ট ভ্যারিয়েবলগুলো খুঁজছে, হুবহু সেই নামে ডামি ডেটা তৈরি করা
-        echo "RELEASE_STORE_FILE=mock.jks" > keystore.properties
-        echo "RELEASE_STORE_PASSWORD=mock_password" >> keystore.properties
-        echo "RELEASE_KEY_ALIAS=mock_alias" >> keystore.properties
-        echo "RELEASE_KEY_PASSWORD=mock_password" >> keystore.properties
-        
-        # কিছু প্রোজেক্টে ছোট হাতের অক্ষরেও খুঁজতে পারে, তাই নিরাপদ থাকার জন্য দুই ফরম্যাটই রাখা হলো
-        echo "storeFile=mock.jks" >> keystore.properties
-        echo "storePassword=mock_password" >> keystore.properties
-        echo "keyAlias=mock_alias" >> keystore.properties
-        echo "keyPassword=mock_password" >> keystore.properties
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
 
-    - name: Grant execute permission for gradlew
+    - name: Create local.properties
+      run: |
+        echo "sdk.dir=$ANDROID_HOME" > local.properties
+        cat local.properties
+
+    - name: Configure Gradle Properties
+      run: |
+        cat > gradle.properties << 'EOF'
+        org.gradle.jvmargs=-Xmx6096M
+        org.gradle.daemon=false
+        org.gradle.parallel=true
+        org.gradle.caching=true
+        android.useAndroidX=true
+        android.enableJetifier=true
+        android.nonTransitiveRClass=true
+        kotlin.code.style=official
+        kotlin.daemon.jvmargs=-Xmx3072M
+        appCodeNumber=7150
+        appVersionNumberBase=9.4
+        appVersionNumberIndex=14
+        appDB=8
+        librera_appGdriveKey=
+        librera_admobAppId=
+        librera_admobBannerId=
+        librera_admobFullId=
+        librera_admobRewardId=
+        pro_appGdriveKey=
+        pdf_classic_appGdriveKey=
+        pdf_classic_admobAppId=
+        pdf_classic_admobBannerId=
+        pdf_classic_admobFullId=
+        pdf_classic_admobRewardId=
+        ebooka_appGdriveKey=
+        ebooka_admobAppId=
+        ebooka_admobBannerId=
+        ebooka_admobFullId=
+        ebooka_admobRewardId=
+        pdf_v2_appGdriveKey=
+        pdf_v2_admobAppId=
+        pdf_v2_admobBannerId=
+        pdf_v2_admobFullId=
+        pdf_v2_admobRewardId=
+        tts_reader_appGdriveKey=
+        tts_reader_admobAppId=
+        tts_reader_admobBannerId=
+        tts_reader_admobFullId=
+        tts_reader_admobRewardId=
+        epub_reader_appGdriveKey=
+        epub_reader_admobAppId=
+        epub_reader_admobBannerId=
+        epub_reader_admobFullId=
+        epub_reader_admobRewardId=
+        RELEASE_STORE_FILE=mock.jks
+        RELEASE_STORE_PASSWORD=mock_password
+        RELEASE_KEY_ALIAS=mock_alias
+        RELEASE_KEY_PASSWORD=mock_password
+        EOF
+        cat gradle.properties
+
+    - name: Grant Execute Permission to Gradlew
       run: chmod +x gradlew
 
-    - name: Build Debug APK
-      run: ./gradlew assembleDebug --stacktrace
+    - name: Build Debug APK (Default)
+      if: github.event_name != 'workflow_dispatch'
+      run: |
+        echo "🔨 Building Debug APK..."
+        ./gradlew clean \
+          -x lint \
+          assembleDebug \
+          --stacktrace \
+          --build-cache
 
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
+    - name: Build Debug APK (Manual)
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'debug'
+      run: |
+        echo "🔨 Building Debug APK..."
+        ./gradlew clean \
+          -x lint \
+          assembleDebug \
+          --stacktrace \
+          --build-cache
+
+    - name: Build Release APK
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'release'
+      run: |
+        echo "🔨 Building Release APK..."
+        ./gradlew clean \
+          -x lint \
+          assembleLibreraRelease \
+          --stacktrace \
+          --build-cache
+
+    - name: Build F-Droid APK
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_type == 'fdroid'
+      run: |
+        echo "🔨 Building F-Droid APK..."
+        ./gradlew clean \
+          -x lint \
+          assembleFdroidRelease \
+          --stacktrace \
+          --build-cache
+
+    - name: List Build Outputs
       if: always()
+      run: |
+        echo "=== APK Build Outputs ==="
+        find app/build/outputs/apk -name "*.apk" -type f 2>/dev/null | head -20 || echo "No APKs found"
+
+    - name: Upload Debug APK Artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
       with:
-        name: Librera-Debug-APKs
-        path: app/build/outputs/apk/**/*.apk
+        name: librera-debug-apks
+        path: app/build/outputs/apk/**/debug/*.apk
+        retention-days: 30
+        if-no-files-found: 'ignore'
+
+    - name: Upload Release APK Artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: librera-release-apks
+        path: |
+          app/build/outputs/apk/**/release/*.apk
+          app/build/outputs/apk/**/*Release*.apk
+        retention-days: 30
+        if-no-files-found: 'ignore'
+
+    - name: Build Success Summary
+      if: success()
+      run: |
+        echo "✅ Build Completed Successfully!"
+        echo "📦 Check the 'Artifacts' section to download your APKs"
+        echo "🎉 Ready to distribute!"
+
+    - name: Build Failure Summary
+      if: failure()
+      run: |
+        echo "❌ Build Failed"
+        echo "📋 Check the logs above for details"
